@@ -1,0 +1,29 @@
+services:
+  kitchenowl:
+    image: tombursch/kitchenowl:latest
+    restart: unless-stopped
+    environment:
+      # Change this! Used to sign KitchenOwl's JWTs.
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:?set JWT_SECRET_KEY in .env}
+    volumes:
+      - kitchenowl_data:/data
+    ports:
+      - "8080:8080"
+
+  kitchenowl-mcp:
+    build: .
+    restart: unless-stopped
+    environment:
+      # The MCP server talks to KitchenOwl over the internal Docker network.
+      KITCHENOWL_URL: http://kitchenowl:8080
+      # Long-lived token, minted in the KitchenOwl app: Profile -> Sessions.
+      KITCHENOWL_TOKEN: ${KITCHENOWL_TOKEN:?set KITCHENOWL_TOKEN in .env}
+      # KITCHENOWL_HOUSEHOLD_ID: "1"
+      # MCP_SERVER_TOKEN: ${MCP_SERVER_TOKEN}   # optional bearer auth for the MCP endpoint
+    ports:
+      - "8000:8000"
+    depends_on:
+      - kitchenowl
+
+volumes:
+  kitchenowl_data:
