@@ -123,7 +123,7 @@ def register(mcp: FastMCP) -> None:
             payload["description"] = description
         if not payload:
             return "Nothing to update — pass at least one field."
-        await client.request("POST", f"/household/{hid}/expense/{expense_id}", json=payload)
+        await client.request("POST", f"/expense/{expense_id}", json=payload)
         return f"Expense {expense_id} updated."
 
     @mcp.tool
@@ -132,7 +132,7 @@ def register(mcp: FastMCP) -> None:
         """Delete an expense. This cannot be undone."""
         client = get_client()
         hid = await client.resolve_household(household_id)
-        await client.request("DELETE", f"/household/{hid}/expense/{expense_id}")
+        await client.request("DELETE", f"/expense/{expense_id}")
         return f"Expense {expense_id} deleted."
 
     @mcp.tool

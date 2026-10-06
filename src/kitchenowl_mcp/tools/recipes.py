@@ -103,7 +103,7 @@ def register(mcp: FastMCP) -> None:
         """Get a recipe with its full description and ingredient list."""
         client = get_client()
         hid = await client.resolve_household(household_id)
-        recipe = await client.request("GET", f"/household/{hid}/recipe/{recipe_id}")
+        recipe = await client.request("GET", f"/recipe/{recipe_id}")
         return _slim_recipe_full(recipe)
 
     @mcp.tool
@@ -161,7 +161,7 @@ def register(mcp: FastMCP) -> None:
         )
         if not payload:
             return "Nothing to update — pass at least one field."
-        await client.request("POST", f"/household/{hid}/recipe/{recipe_id}", json=payload)
+        await client.request("POST", f"/recipe/{recipe_id}", json=payload)
         return f"Recipe {recipe_id} updated."
 
     @mcp.tool
@@ -170,7 +170,7 @@ def register(mcp: FastMCP) -> None:
         """Delete a recipe. This cannot be undone."""
         client = get_client()
         hid = await client.resolve_household(household_id)
-        await client.request("DELETE", f"/household/{hid}/recipe/{recipe_id}")
+        await client.request("DELETE", f"/recipe/{recipe_id}")
         return f"Recipe {recipe_id} deleted."
 
     @mcp.tool
