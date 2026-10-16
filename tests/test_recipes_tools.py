@@ -23,7 +23,7 @@ RECIPE = {
 
 @respx.mock
 async def test_get_recipe_slims_and_strips_photo(mcp_client):
-    respx.get(f"{BASE}/api/household/1/recipe/5").mock(
+    respx.get(f"{BASE}/api/recipe/5").mock(
         return_value=httpx.Response(200, json=RECIPE)
     )
     result = await mcp_client.call_tool("get_recipe", {"recipe_id": 5})
@@ -64,7 +64,7 @@ async def test_create_recipe_payload(mcp_client):
     payload = json.loads(route.calls.last.request.content)
     assert payload["name"] == "Pasta"
     assert payload["items"] == [{"name": "Spaghetti", "description": "500g", "optional": False}]
-    assert payload["tags"] == [{"name": "italian"}]
+    assert payload["tags"] == ["italian"]
 
 
 @respx.mock
@@ -95,3 +95,12 @@ async def test_import_recipe_from_url_falls_back_to_post(mcp_client):
     )
     assert result.data["saved"] is True
     assert save_route.called
+
+
+@respx.mock
+async def test_list_tags(mcp_client):
+    respx.get(f"{BASE}/api/household/1/tag").mock(
+        return_value=httpx.Response(200, json=[{"id": 1, "name": "Dessert"}, {"id": 2, "name": "Backen"}])
+    )
+    result = await mcp_client.call_tool("list_tags", {})
+    assert result.data == ["Dessert", "Backen"]
