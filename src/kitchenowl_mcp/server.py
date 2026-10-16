@@ -6,9 +6,10 @@ from fastmcp import FastMCP
 from fastmcp.server.auth.providers.jwt import StaticTokenVerifier
 from fastmcp.server.lifespan import lifespan
 
+from kitchenowl_mcp.auth import KitchenOwlOAuthProvider
 from kitchenowl_mcp.client import KitchenOwlClient
 from kitchenowl_mcp.config import Settings
-from kitchenowl_mcp.tools import register_all, set_client
+from kitchenowl_mcp.tools import close_user_clients, register_all, set_client, set_kitchenowl_url
 
 INSTRUCTIONS = (
     "Tools for managing a KitchenOwl household: shopping lists, recipes, meal planning, "
@@ -21,17 +22,22 @@ INSTRUCTIONS = (
 @lifespan
 async def _kitchenowl_lifespan(server: FastMCP):
     settings = Settings.from_env()
-    client = KitchenOwlClient(
-        settings.kitchenowl_url,
-        settings.kitchenowl_token,
-        default_household_id=settings.household_id,
-    )
+    set_kitchenowl_url(settings.kitchenowl_url)
+    client = None
+    if settings.kitchenowl_token:
+        client = KitchenOwlClient(
+            settings.kitchenowl_url,
+            settings.kitchenowl_token,
+            default_household_id=settings.household_id,
+        )
     set_client(client)
     try:
         yield {}
     finally:
         set_client(None)
-        await client.aclose()
+        await close_user_clients()
+        if client:
+            await client.aclose()
 
 
 def create_server(*, with_lifespan: bool = True, auth: object | None = None) -> FastMCP:
@@ -48,7 +54,14 @@ def create_server(*, with_lifespan: bool = True, auth: object | None = None) -> 
 def main() -> None:
     settings = Settings.from_env()
     auth = None
-    if settings.mcp_server_token:
+    if settings.mcp_base_url:
+        auth = KitchenOwlOAuthProvider(
+            base_url=settings.mcp_base_url,
+            kitchenowl_url=settings.kitchenowl_url,
+            secret_key=settings.mcp_secret_key,
+            data_dir=settings.mcp_data_dir,
+        )
+    elif settings.mcp_server_token:
         auth = StaticTokenVerifier(
             tokens={settings.mcp_server_token: {"client_id": "kitchenowl-mcp", "scopes": []}}
         )

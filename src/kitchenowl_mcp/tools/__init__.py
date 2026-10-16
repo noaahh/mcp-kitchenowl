@@ -8,10 +8,14 @@ from typing import Any, TypeVar
 
 from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
+from fastmcp.server.dependencies import get_access_token
 
 from kitchenowl_mcp.client import KitchenOwlClient, KitchenOwlError
 
 _client: KitchenOwlClient | None = None
+_kitchenowl_url = ""
+# ponytail: one client per logged-in user, never evicted; fine for a household or two
+_user_clients: dict[str, KitchenOwlClient] = {}
 
 
 def set_client(client: KitchenOwlClient | None) -> None:
@@ -19,7 +23,25 @@ def set_client(client: KitchenOwlClient | None) -> None:
     _client = client
 
 
+def set_kitchenowl_url(url: str) -> None:
+    global _kitchenowl_url
+    _kitchenowl_url = url
+
+
+async def close_user_clients() -> None:
+    for client in _user_clients.values():
+        await client.aclose()
+    _user_clients.clear()
+
+
 def get_client() -> KitchenOwlClient:
+    """The logged-in user's client when the request carries a KitchenOwl login, else the env one."""
+    token = get_access_token()
+    ko_token = token.claims.get("kitchenowl_token") if token else None
+    if ko_token:
+        if ko_token not in _user_clients:
+            _user_clients[ko_token] = KitchenOwlClient(_kitchenowl_url, ko_token)
+        return _user_clients[ko_token]
     if _client is None:
         raise ToolError("KitchenOwl client is not initialized (server not started).")
     return _client
