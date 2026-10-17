@@ -67,7 +67,7 @@ async def test_list_expenses_slims(mcp_client):
                     "amount": 42.5,
                     "date": 1751328000000,
                     "category": {"id": 3, "name": "Food"},
-                    "paid_by": {"id": 1, "name": "Alice"},
+                    "paid_by_id": 1,
                     "paid_for": [{"user_id": 1, "factor": 1}],
                     "photo": "blob",
                 }
