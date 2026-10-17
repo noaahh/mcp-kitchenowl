@@ -15,6 +15,12 @@ def _iso_date_to_epoch_ms(value: str) -> int:
     return int(datetime(parsed.year, parsed.month, parsed.day, tzinfo=UTC).timestamp() * 1000)
 
 
+def _paid_for(paid_for: list[int] | dict[int, int]) -> list[dict[str, int]]:
+    if isinstance(paid_for, dict):
+        return [{"id": int(uid), "factor": factor} for uid, factor in paid_for.items()]
+    return [{"id": uid, "factor": 1} for uid in paid_for]
+
+
 def _slim_expense(expense: dict[str, Any]) -> dict[str, Any]:
     category = expense.get("category")
     paid_by = expense.get("paid_by")
@@ -57,7 +63,7 @@ def register(mcp: FastMCP) -> None:
         name: str,
         amount: float,
         paid_by: int,
-        paid_for: list[int] | None = None,
+        paid_for: list[int] | dict[int, int] | None = None,
         expense_date: str | None = None,
         category_id: int | None = None,
         description: str = "",
@@ -65,8 +71,9 @@ def register(mcp: FastMCP) -> None:
     ) -> dict[str, Any]:
         """Add an expense to the household.
 
-        paid_by is the member's user id (see get_household). paid_for lists the user ids
-        the expense is split between (equal split; defaults to all household members).
+        paid_by is the member's user id (see get_household). paid_for is either a list of
+        user ids (equal split; defaults to all household members) or a mapping of user id
+        to integer share weight, e.g. {"1": 60, "2": 40} for a 60/40 split.
         expense_date is an ISO date (YYYY-MM-DD; defaults to now). Get category ids from
         get_expense_categories.
         """
@@ -79,14 +86,14 @@ def register(mcp: FastMCP) -> None:
             "name": name,
             "amount": amount,
             "paid_by": {"id": paid_by},
-            "paid_for": [{"id": uid, "factor": 1} for uid in paid_for],
+            "paid_for": _paid_for(paid_for),
         }
         if description:
             payload["description"] = description
         if expense_date is not None:
             payload["date"] = _iso_date_to_epoch_ms(expense_date)
         if category_id is not None:
-            payload["category"] = {"id": category_id}
+            payload["category"] = category_id
         result = await client.request("POST", f"/household/{hid}/expense", json=payload)
         return _slim_expense(result) if isinstance(result, dict) else {"name": name}
 
@@ -97,13 +104,16 @@ def register(mcp: FastMCP) -> None:
         name: str | None = None,
         amount: float | None = None,
         paid_by: int | None = None,
-        paid_for: list[int] | None = None,
+        paid_for: list[int] | dict[int, int] | None = None,
         expense_date: str | None = None,
         category_id: int | None = None,
         description: str | None = None,
         household_id: int | None = None,
     ) -> str:
-        """Update an expense. Only the fields you pass are changed."""
+        """Update an expense. Only the fields you pass are changed.
+
+        paid_for takes the same forms as in add_expense.
+        """
         client = get_client()
         hid = await client.resolve_household(household_id)
         payload: dict[str, Any] = {}
@@ -114,11 +124,11 @@ def register(mcp: FastMCP) -> None:
         if paid_by is not None:
             payload["paid_by"] = {"id": paid_by}
         if paid_for is not None:
-            payload["paid_for"] = [{"id": uid, "factor": 1} for uid in paid_for]
+            payload["paid_for"] = _paid_for(paid_for)
         if expense_date is not None:
             payload["date"] = _iso_date_to_epoch_ms(expense_date)
         if category_id is not None:
-            payload["category"] = {"id": category_id}
+            payload["category"] = category_id
         if description is not None:
             payload["description"] = description
         if not payload:
@@ -156,7 +166,7 @@ def register(mcp: FastMCP) -> None:
         client = get_client()
         hid = await client.resolve_household(household_id)
         result = await client.request(
-            "POST", f"/household/{hid}/expense/categories", json={"name": name}
+            "POST", f"/household/{hid}/expense/categories", json={"name": name, "color": None}
         )
         if isinstance(result, dict):
             return {"id": result.get("id"), "name": result.get("name")}

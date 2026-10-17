@@ -52,7 +52,7 @@ async def test_add_expense_with_explicit_split_and_date(mcp_client):
     payload = json.loads(route.calls.last.request.content)
     assert payload["paid_for"] == [{"id": 2, "factor": 1}]
     assert payload["date"] == 1751328000000
-    assert payload["category"] == {"id": 3}
+    assert payload["category"] == 3
 
 
 @respx.mock
@@ -102,3 +102,26 @@ async def test_households_tools(mcp_client):
     respx.get(f"{BASE}/api/household/1").mock(return_value=httpx.Response(200, json=HOUSEHOLD))
     result = await mcp_client.call_tool("get_household", {})
     assert [m["id"] for m in result.data["members"]] == [1, 2]
+
+
+@respx.mock
+async def test_add_expense_weighted_split(mcp_client):
+    route = respx.post(f"{BASE}/api/household/1/expense").mock(
+        return_value=httpx.Response(200, json={"id": 9, "name": "Migros", "amount": 100})
+    )
+    await mcp_client.call_tool(
+        "add_expense",
+        {"name": "Migros", "amount": 100, "paid_by": 1, "paid_for": {"1": 60, "2": 40}},
+    )
+    payload = json.loads(route.calls.last.request.content)
+    assert payload["paid_for"] == [{"id": 1, "factor": 60}, {"id": 2, "factor": 40}]
+
+
+@respx.mock
+async def test_create_expense_category_sends_color(mcp_client):
+    route = respx.post(f"{BASE}/api/household/1/expense/categories").mock(
+        return_value=httpx.Response(200, json={"id": 4, "name": "Vorrat"})
+    )
+    result = await mcp_client.call_tool("create_expense_category", {"name": "Vorrat"})
+    assert json.loads(route.calls.last.request.content) == {"name": "Vorrat", "color": None}
+    assert result.data == {"id": 4, "name": "Vorrat"}
