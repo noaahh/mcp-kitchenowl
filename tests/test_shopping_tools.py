@@ -22,7 +22,7 @@ async def test_list_shopping_lists(mcp_client):
 
 @respx.mock
 async def test_add_shopping_list_item_payload(mcp_client):
-    route = respx.post(f"{BASE}/api/household/1/shoppinglist/2/add-item-by-name").mock(
+    route = respx.post(f"{BASE}/api/shoppinglist/2/add-item-by-name").mock(
         return_value=httpx.Response(
             200,
             json={"id": 10, "name": "Milk", "description": "2L", "category": {"name": "Dairy"}},
@@ -37,7 +37,7 @@ async def test_add_shopping_list_item_payload(mcp_client):
 
 @respx.mock
 async def test_remove_shopping_list_items_batch(mcp_client):
-    route = respx.delete(f"{BASE}/api/household/1/shoppinglist/2/items").mock(
+    route = respx.delete(f"{BASE}/api/shoppinglist/2/items").mock(
         return_value=httpx.Response(200, json={"msg": "DONE"})
     )
     result = await mcp_client.call_tool(
@@ -51,7 +51,7 @@ async def test_remove_shopping_list_items_batch(mcp_client):
 
 @respx.mock
 async def test_get_shopping_list_items_slims_fields(mcp_client):
-    respx.get(f"{BASE}/api/household/1/shoppinglist/2/items").mock(
+    respx.get(f"{BASE}/api/shoppinglist/2/items").mock(
         return_value=httpx.Response(
             200,
             json=[
@@ -73,7 +73,7 @@ async def test_get_shopping_list_items_slims_fields(mcp_client):
 
 @respx.mock
 async def test_add_recipe_items_to_shopping_list_composite(mcp_client):
-    respx.get(f"{BASE}/api/household/1/recipe/5").mock(
+    respx.get(f"{BASE}/api/recipe/5").mock(
         return_value=httpx.Response(
             200,
             json={
@@ -86,7 +86,7 @@ async def test_add_recipe_items_to_shopping_list_composite(mcp_client):
             },
         )
     )
-    route = respx.post(f"{BASE}/api/household/1/shoppinglist/2/recipeitems").mock(
+    route = respx.post(f"{BASE}/api/shoppinglist/2/recipeitems").mock(
         return_value=httpx.Response(200, json={"msg": "DONE"})
     )
     result = await mcp_client.call_tool(
@@ -101,7 +101,7 @@ async def test_add_recipe_items_to_shopping_list_composite(mcp_client):
 
 @respx.mock
 async def test_404_becomes_actionable_tool_error(mcp_client):
-    respx.get(f"{BASE}/api/household/1/shoppinglist/99/items").mock(
+    respx.get(f"{BASE}/api/shoppinglist/99/items").mock(
         return_value=httpx.Response(404, json={"msg": "Not found"})
     )
     with pytest.raises(ToolError, match="404"):

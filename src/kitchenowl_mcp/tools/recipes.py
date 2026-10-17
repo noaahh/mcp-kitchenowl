@@ -72,7 +72,7 @@ def _recipe_payload(
             for i in items
         ]
     if tags is not None:
-        payload["tags"] = [{"name": t} for t in tags]
+        payload["tags"] = list(tags)
     return payload
 
 
@@ -85,6 +85,14 @@ def register(mcp: FastMCP) -> None:
         hid = await client.resolve_household(household_id)
         recipes = await client.request("GET", f"/household/{hid}/recipe")
         return [_slim_recipe_summary(r) for r in recipes]
+
+    @mcp.tool
+    @kitchenowl_tool
+    async def list_tags(household_id: int | None = None) -> list[str]:
+        """List the household's recipe tags (reuse these names in create/update_recipe)."""
+        client = get_client()
+        hid = await client.resolve_household(household_id)
+        return [t["name"] for t in await client.request("GET", f"/household/{hid}/tag")]
 
     @mcp.tool
     @kitchenowl_tool
@@ -103,7 +111,7 @@ def register(mcp: FastMCP) -> None:
         """Get a recipe with its full description and ingredient list."""
         client = get_client()
         hid = await client.resolve_household(household_id)
-        recipe = await client.request("GET", f"/household/{hid}/recipe/{recipe_id}")
+        recipe = await client.request("GET", f"/recipe/{recipe_id}")
         return _slim_recipe_full(recipe)
 
     @mcp.tool
@@ -161,7 +169,7 @@ def register(mcp: FastMCP) -> None:
         )
         if not payload:
             return "Nothing to update — pass at least one field."
-        await client.request("POST", f"/household/{hid}/recipe/{recipe_id}", json=payload)
+        await client.request("POST", f"/recipe/{recipe_id}", json=payload)
         return f"Recipe {recipe_id} updated."
 
     @mcp.tool
@@ -170,7 +178,7 @@ def register(mcp: FastMCP) -> None:
         """Delete a recipe. This cannot be undone."""
         client = get_client()
         hid = await client.resolve_household(household_id)
-        await client.request("DELETE", f"/household/{hid}/recipe/{recipe_id}")
+        await client.request("DELETE", f"/recipe/{recipe_id}")
         return f"Recipe {recipe_id} deleted."
 
     @mcp.tool

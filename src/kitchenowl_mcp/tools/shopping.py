@@ -47,7 +47,7 @@ def register(mcp: FastMCP) -> None:
         client = get_client()
         hid = await client.resolve_household(household_id)
         await client.request(
-            "POST", f"/household/{hid}/shoppinglist/{list_id}", json={"name": name}
+            "POST", f"/shoppinglist/{list_id}", json={"name": name}
         )
         return f"Shopping list {list_id} renamed to '{name}'."
 
@@ -57,7 +57,7 @@ def register(mcp: FastMCP) -> None:
         """Delete a shopping list. This cannot be undone."""
         client = get_client()
         hid = await client.resolve_household(household_id)
-        await client.request("DELETE", f"/household/{hid}/shoppinglist/{list_id}")
+        await client.request("DELETE", f"/shoppinglist/{list_id}")
         return f"Shopping list {list_id} deleted."
 
     @mcp.tool
@@ -71,7 +71,7 @@ def register(mcp: FastMCP) -> None:
         """
         client = get_client()
         hid = await client.resolve_household(household_id)
-        items = await client.request("GET", f"/household/{hid}/shoppinglist/{list_id}/items")
+        items = await client.request("GET", f"/shoppinglist/{list_id}/items")
         return [_slim_item(i) for i in items]
 
     @mcp.tool
@@ -93,7 +93,7 @@ def register(mcp: FastMCP) -> None:
         if description:
             payload["description"] = description
         result = await client.request(
-            "POST", f"/household/{hid}/shoppinglist/{list_id}/add-item-by-name", json=payload
+            "POST", f"/shoppinglist/{list_id}/add-item-by-name", json=payload
         )
         return _slim_item(result) if isinstance(result, dict) else {"name": name}
 
@@ -110,7 +110,7 @@ def register(mcp: FastMCP) -> None:
         hid = await client.resolve_household(household_id)
         await client.request(
             "POST",
-            f"/household/{hid}/shoppinglist/{list_id}/item/{item_id}",
+            f"/shoppinglist/{list_id}/item/{item_id}",
             json={"description": description},
         )
         return f"Item {item_id} updated."
@@ -132,7 +132,7 @@ def register(mcp: FastMCP) -> None:
         hid = await client.resolve_household(household_id)
         await client.request(
             "DELETE",
-            f"/household/{hid}/shoppinglist/{list_id}/items",
+            f"/shoppinglist/{list_id}/items",
             json={"items": [{"item_id": item_id} for item_id in item_ids]},
         )
         return f"Removed {len(item_ids)} item(s) from list {list_id}."
@@ -146,7 +146,7 @@ def register(mcp: FastMCP) -> None:
         client = get_client()
         hid = await client.resolve_household(household_id)
         items = await client.request(
-            "GET", f"/household/{hid}/shoppinglist/{list_id}/recent-items"
+            "GET", f"/shoppinglist/{list_id}/recent-items"
         )
         return [_slim_item(i) for i in items]
 
@@ -159,7 +159,7 @@ def register(mcp: FastMCP) -> None:
         client = get_client()
         hid = await client.resolve_household(household_id)
         items = await client.request(
-            "GET", f"/household/{hid}/shoppinglist/{list_id}/suggested-items"
+            "GET", f"/shoppinglist/{list_id}/suggested-items"
         )
         return [_slim_item(i) for i in items]
 
@@ -173,7 +173,7 @@ def register(mcp: FastMCP) -> None:
         """Add all non-optional ingredients of a recipe to a shopping list."""
         client = get_client()
         hid = await client.resolve_household(household_id)
-        recipe = await client.request("GET", f"/household/{hid}/recipe/{recipe_id}")
+        recipe = await client.request("GET", f"/recipe/{recipe_id}")
         items = [
             {"id": i["id"], "description": i.get("description") or ""}
             for i in recipe.get("items", []) or []
@@ -183,7 +183,7 @@ def register(mcp: FastMCP) -> None:
             return f"Recipe '{recipe.get('name')}' has no non-optional ingredients to add."
         await client.request(
             "POST",
-            f"/household/{hid}/shoppinglist/{list_id}/recipeitems",
+            f"/shoppinglist/{list_id}/recipeitems",
             json={"items": items},
         )
         return (
@@ -223,5 +223,5 @@ def register(mcp: FastMCP) -> None:
             payload["icon"] = icon
         if not payload:
             return "Nothing to update — pass name, category_id, or icon."
-        await client.request("POST", f"/household/{hid}/item/{item_id}", json=payload)
+        await client.request("POST", f"/item/{item_id}", json=payload)
         return f"Item {item_id} updated."
