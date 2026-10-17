@@ -93,7 +93,7 @@ async def test_add_recipe_items_to_shopping_list_composite(mcp_client):
         "add_recipe_items_to_shopping_list", {"list_id": 2, "recipe_id": 5}
     )
     assert json.loads(route.calls.last.request.content) == {
-        "items": [{"id": 20, "description": "500g"}]
+        "items": [{"id": 20, "name": "Spaghetti", "description": "500g"}]
     }
     assert "1 ingredient(s)" in result.data
     assert "Pasta" in result.data
@@ -115,3 +115,19 @@ async def test_401_mentions_token_env_var(mcp_client):
     )
     with pytest.raises(ToolError, match="KITCHENOWL_TOKEN"):
         await mcp_client.call_tool("list_shopping_lists", {})
+
+
+@respx.mock
+async def test_item_categories(mcp_client):
+    respx.get(f"{BASE}/api/household/1/category").mock(
+        return_value=httpx.Response(200, json=[{"id": 3, "name": "Milchprodukte", "ordering": 0}])
+    )
+    result = await mcp_client.call_tool("list_item_categories", {})
+    assert result.data == [{"id": 3, "name": "Milchprodukte"}]
+
+    route = respx.post(f"{BASE}/api/household/1/category").mock(
+        return_value=httpx.Response(200, json={"id": 4, "name": "Backen"})
+    )
+    result = await mcp_client.call_tool("create_item_category", {"name": "Backen"})
+    assert json.loads(route.calls.last.request.content) == {"name": "Backen"}
+    assert result.data == {"id": 4, "name": "Backen"}

@@ -3,11 +3,16 @@
 from __future__ import annotations
 
 from datetime import UTC, date, datetime
-from typing import Any
+from typing import Any, Literal
 
 from fastmcp import FastMCP
 
 from kitchenowl_mcp.tools import get_client, kitchenowl_tool
+
+
+DAY_MS = 24 * 60 * 60 * 1000
+# the backend returns expense lists in pages of this size
+PAGE_SIZE = 30
 
 
 def _iso_date_to_epoch_ms(value: str) -> int:
@@ -50,6 +55,7 @@ def _slim_expense(expense: dict[str, Any]) -> dict[str, Any]:
         "date": expense.get("date"),
         "description": expense.get("description") or "",
         "category": category.get("name") if isinstance(category, dict) else category,
+        "exclude_from_statistics": bool(expense.get("exclude_from_statistics")),
         "paid_by": paid_by.get("id") if isinstance(paid_by, dict) else paid_by,
         "paid_for": [
             {"user_id": pf.get("user_id", pf.get("id")), "factor": pf.get("factor")}
@@ -63,17 +69,40 @@ def register(mcp: FastMCP) -> None:
     @kitchenowl_tool
     async def list_expenses(
         search: str | None = None,
+        date_from: str | None = None,
+        date_to: str | None = None,
         household_id: int | None = None,
     ) -> list[dict[str, Any]]:
-        """List the household's most recent expenses (newest first), optionally filtered by name."""
+        """List the household's expenses (newest first), optionally filtered by name.
+
+        Without dates only the latest 30 are returned. With date_from and/or date_to
+        (ISO dates, inclusive) every expense in that range is returned.
+        """
         client = get_client()
         hid = await client.resolve_household(household_id)
         params: dict[str, Any] = {}
         if search:
             params["search"] = search
-        expenses = await client.request(
-            "GET", f"/household/{hid}/expense", params=params or None
-        )
+        # the backend filters date > endBeforeDate and date < startAfterDate
+        if date_from:
+            params["endBeforeDate"] = _iso_date_to_epoch_ms(date_from) - 1
+        if date_to:
+            params["startAfterDate"] = _iso_date_to_epoch_ms(date_to) + DAY_MS
+        path = f"/household/{hid}/expense"
+        expenses = await client.request("GET", path, params=params or None)
+        if date_from or date_to:
+            seen = {e["id"] for e in expenses}
+            batch = expenses
+            while len(batch) == PAGE_SIZE:
+                # +1 keeps entries sharing the last timestamp; seen drops the repeats
+                params["startAfterDate"] = batch[-1]["date"] + 1
+                batch = await client.request("GET", path, params=params)
+                new = [e for e in batch if e["id"] not in seen]
+                # ponytail: more than PAGE_SIZE expenses on one timestamp stop paging here
+                if not new:
+                    break
+                seen.update(e["id"] for e in new)
+                expenses += new
         return [_slim_expense(e) for e in expenses]
 
     @mcp.tool
@@ -86,6 +115,7 @@ def register(mcp: FastMCP) -> None:
         expense_date: str | None = None,
         category_id: int | None = None,
         description: str = "",
+        exclude_from_statistics: bool = False,
         household_id: int | None = None,
     ) -> dict[str, Any]:
         """Add an expense to the household.
@@ -94,7 +124,8 @@ def register(mcp: FastMCP) -> None:
         user ids (equal split; defaults to all household members) or a mapping of user id
         to integer share weight, e.g. {"1": 60, "2": 40} for a 60/40 split.
         expense_date is an ISO date (YYYY-MM-DD; defaults to now). Get category ids from
-        get_expense_categories.
+        get_expense_categories. Set exclude_from_statistics for one-off purchases that
+        should not count in the overview (they still count in balances).
         """
         client = get_client()
         hid = await client.resolve_household(household_id)
@@ -109,6 +140,8 @@ def register(mcp: FastMCP) -> None:
         }
         if description:
             payload["description"] = description
+        if exclude_from_statistics:
+            payload["exclude_from_statistics"] = True
         if expense_date is not None:
             payload["date"] = _iso_date_to_epoch_ms(expense_date)
         if category_id is not None:
@@ -127,6 +160,7 @@ def register(mcp: FastMCP) -> None:
         expense_date: str | None = None,
         category_id: int | None = None,
         description: str | None = None,
+        exclude_from_statistics: bool | None = None,
         household_id: int | None = None,
     ) -> str:
         """Update an expense. Only the fields you pass are changed.
@@ -150,6 +184,8 @@ def register(mcp: FastMCP) -> None:
             payload["category"] = category_id
         if description is not None:
             payload["description"] = description
+        if exclude_from_statistics is not None:
+            payload["exclude_from_statistics"] = exclude_from_statistics
         if not payload:
             return "Nothing to update — pass at least one field."
         await client.request("POST", f"/expense/{expense_id}", json=payload)
@@ -253,8 +289,25 @@ def register(mcp: FastMCP) -> None:
 
     @mcp.tool
     @kitchenowl_tool
-    async def get_expense_overview(household_id: int | None = None) -> Any:
-        """Get the household's expense overview (totals per member/category)."""
+    async def get_expense_overview(
+        frame: Literal["daily", "weekly", "monthly", "yearly"] = "monthly",
+        steps: int = 5,
+        page: int = 0,
+        personal: bool = False,
+        household_id: int | None = None,
+    ) -> Any:
+        """Get expense totals per category for the last `steps` frames (current first).
+
+        page shifts the window back in time by `steps` frames. personal=true shows only
+        your share instead of the household's. Expenses excluded from statistics are
+        not counted.
+        """
         client = get_client()
         hid = await client.resolve_household(household_id)
-        return await client.request("GET", f"/household/{hid}/expense/overview")
+        params = {
+            "frame": ["daily", "weekly", "monthly", "yearly"].index(frame),
+            "steps": steps,
+            "page": page,
+            "view": int(personal),
+        }
+        return await client.request("GET", f"/household/{hid}/expense/overview", params=params)
