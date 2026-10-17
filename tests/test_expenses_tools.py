@@ -84,11 +84,11 @@ async def test_list_expenses_slims(mcp_client):
 async def test_get_expense_categories(mcp_client):
     respx.get(f"{BASE}/api/household/1/expense/categories").mock(
         return_value=httpx.Response(
-            200, json=[{"id": 3, "name": "Food", "color": 5, "budget": 200}]
+            200, json=[{"id": 3, "name": "Food", "color": 0xFFF2C94C, "budget": 200}]
         )
     )
     result = await mcp_client.call_tool("get_expense_categories", {})
-    assert result.data == [{"id": 3, "name": "Food", "budget": 200}]
+    assert result.data == [{"id": 3, "name": "Food", "color": "#F2C94C", "budget": 200}]
 
 
 @respx.mock
@@ -124,4 +124,47 @@ async def test_create_expense_category_sends_color(mcp_client):
     )
     result = await mcp_client.call_tool("create_expense_category", {"name": "Vorrat"})
     assert json.loads(route.calls.last.request.content) == {"name": "Vorrat", "color": None}
-    assert result.data == {"id": 4, "name": "Vorrat"}
+    assert result.data == {"id": 4, "name": "Vorrat", "color": None, "budget": None}
+
+
+@respx.mock
+async def test_create_expense_category_with_color_and_budget(mcp_client):
+    route = respx.post(f"{BASE}/api/household/1/expense/categories").mock(
+        return_value=httpx.Response(200, json={"id": 4, "name": "Vorrat"})
+    )
+    await mcp_client.call_tool(
+        "create_expense_category", {"name": "Vorrat", "color": "#A1887F", "budget": 100}
+    )
+    assert json.loads(route.calls.last.request.content) == {
+        "name": "Vorrat",
+        "color": 0xFFA1887F,
+        "budget": 100,
+    }
+
+
+@respx.mock
+async def test_update_expense_category(mcp_client):
+    route = respx.post(f"{BASE}/api/expense/categories/4").mock(
+        return_value=httpx.Response(
+            200, json={"id": 4, "name": "Vorrat", "color": 0xFFA1887F, "budget": 100}
+        )
+    )
+    result = await mcp_client.call_tool(
+        "update_expense_category",
+        {"category_id": 4, "color": "a1887f", "budget": 100, "merge_category_id": 7},
+    )
+    assert json.loads(route.calls.last.request.content) == {
+        "color": 0xFFA1887F,
+        "budget": 100,
+        "merge_category_id": 7,
+    }
+    assert result.data["color"] == "#A1887F"
+
+
+@respx.mock
+async def test_delete_expense_category(mcp_client):
+    route = respx.delete(f"{BASE}/api/expense/categories/4").mock(
+        return_value=httpx.Response(200, json={"msg": "DONE"})
+    )
+    await mcp_client.call_tool("delete_expense_category", {"category_id": 4})
+    assert route.called
