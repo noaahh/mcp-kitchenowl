@@ -23,7 +23,8 @@ def _paid_for(paid_for: list[int] | dict[int, int]) -> list[dict[str, int]]:
 
 def _slim_expense(expense: dict[str, Any]) -> dict[str, Any]:
     category = expense.get("category")
-    paid_by = expense.get("paid_by")
+    # the API returns the paid_by_id column, not a paid_by object
+    paid_by = expense.get("paid_by_id", expense.get("paid_by"))
     return {
         "id": expense.get("id"),
         "name": expense.get("name"),
