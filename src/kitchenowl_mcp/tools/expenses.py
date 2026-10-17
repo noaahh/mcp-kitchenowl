@@ -21,6 +21,24 @@ def _paid_for(paid_for: list[int] | dict[int, int]) -> list[dict[str, int]]:
     return [{"id": uid, "factor": 1} for uid in paid_for]
 
 
+def _color_to_int(color: str) -> int:
+    # KitchenOwl stores Flutter ARGB ints; accept "#RRGGBB" and make it opaque
+    digits = color.removeprefix("#")
+    if len(digits) != 6:
+        raise ValueError(f"color must be #RRGGBB, got {color!r}")
+    return 0xFF000000 | int(digits, 16)
+
+
+def _slim_category(category: dict[str, Any]) -> dict[str, Any]:
+    color = category.get("color")
+    return {
+        "id": category.get("id"),
+        "name": category.get("name"),
+        "color": f"#{color & 0xFFFFFF:06X}" if isinstance(color, int) else None,
+        "budget": category.get("budget"),
+    }
+
+
 def _slim_expense(expense: dict[str, Any]) -> dict[str, Any]:
     category = expense.get("category")
     # the API returns the paid_by_id column, not a paid_by object
@@ -149,29 +167,89 @@ def register(mcp: FastMCP) -> None:
     @mcp.tool
     @kitchenowl_tool
     async def get_expense_categories(household_id: int | None = None) -> list[dict[str, Any]]:
-        """List the household's expense categories (ids usable in add_expense/update_expense)."""
+        """List the household's expense categories with color (#RRGGBB) and monthly budget.
+
+        The ids are usable in add_expense/update_expense.
+        """
         client = get_client()
         hid = await client.resolve_household(household_id)
         categories = await client.request("GET", f"/household/{hid}/expense/categories")
-        return [
-            {"id": c.get("id"), "name": c.get("name"), "budget": c.get("budget")}
-            for c in categories
-        ]
+        return [_slim_category(c) for c in categories]
 
     @mcp.tool
     @kitchenowl_tool
     async def create_expense_category(
-        name: str, household_id: int | None = None
+        name: str,
+        color: str | None = None,
+        budget: float | None = None,
+        household_id: int | None = None,
     ) -> dict[str, Any]:
-        """Create a new expense category."""
+        """Create a new expense category.
+
+        color is a hex color like "#F2C94C"; budget is the monthly budget amount.
+        """
         client = get_client()
         hid = await client.resolve_household(household_id)
+        # the backend reads color unconditionally, so it is always sent
+        payload: dict[str, Any] = {
+            "name": name,
+            "color": _color_to_int(color) if color else None,
+        }
+        if budget is not None:
+            payload["budget"] = budget
         result = await client.request(
-            "POST", f"/household/{hid}/expense/categories", json={"name": name, "color": None}
+            "POST", f"/household/{hid}/expense/categories", json=payload
         )
-        if isinstance(result, dict):
-            return {"id": result.get("id"), "name": result.get("name")}
-        return {"name": name}
+        return _slim_category(result) if isinstance(result, dict) else {"name": name}
+
+    @mcp.tool
+    @kitchenowl_tool
+    async def update_expense_category(
+        category_id: int,
+        name: str | None = None,
+        color: str | None = None,
+        budget: float | None = None,
+        merge_category_id: int | None = None,
+        household_id: int | None = None,
+    ) -> dict[str, Any] | str:
+        """Update an expense category. Only the fields you pass are changed.
+
+        color is a hex color like "#F2C94C"; budget is the monthly budget amount.
+        merge_category_id moves all expenses of that other category into this one and
+        deletes the other category (use it to clean up duplicates).
+        """
+        client = get_client()
+        hid = await client.resolve_household(household_id)
+        payload: dict[str, Any] = {}
+        if name is not None:
+            payload["name"] = name
+        if color is not None:
+            payload["color"] = _color_to_int(color)
+        if budget is not None:
+            payload["budget"] = budget
+        if merge_category_id is not None:
+            payload["merge_category_id"] = merge_category_id
+        if not payload:
+            return "Nothing to update — pass at least one field."
+        result = await client.request(
+            "POST", f"/expense/categories/{category_id}", json=payload
+        )
+        return _slim_category(result) if isinstance(result, dict) else f"Category {category_id} updated."
+
+    @mcp.tool
+    @kitchenowl_tool
+    async def delete_expense_category(
+        category_id: int, household_id: int | None = None
+    ) -> str:
+        """Delete an expense category. Its expenses stay, without a category.
+
+        To keep the expenses categorized, merge it into another category instead
+        (update_expense_category with merge_category_id).
+        """
+        client = get_client()
+        hid = await client.resolve_household(household_id)
+        await client.request("DELETE", f"/expense/categories/{category_id}")
+        return f"Category {category_id} deleted."
 
     @mcp.tool
     @kitchenowl_tool
