@@ -175,7 +175,7 @@ def register(mcp: FastMCP) -> None:
         hid = await client.resolve_household(household_id)
         recipe = await client.request("GET", f"/recipe/{recipe_id}")
         items = [
-            {"id": i["id"], "description": i.get("description") or ""}
+            {"id": i["id"], "name": i["name"], "description": i.get("description") or ""}
             for i in recipe.get("items", []) or []
             if not i.get("optional")
         ]
@@ -201,6 +201,24 @@ def register(mcp: FastMCP) -> None:
             "GET", f"/household/{hid}/item/search", params={"query": query}
         )
         return [_slim_item(i) for i in items]
+
+    @mcp.tool
+    @kitchenowl_tool
+    async def list_item_categories(household_id: int | None = None) -> list[dict[str, Any]]:
+        """List the household's shopping item categories (ids usable in update_item)."""
+        client = get_client()
+        hid = await client.resolve_household(household_id)
+        categories = await client.request("GET", f"/household/{hid}/category")
+        return [{"id": c.get("id"), "name": c.get("name")} for c in categories]
+
+    @mcp.tool
+    @kitchenowl_tool
+    async def create_item_category(name: str, household_id: int | None = None) -> dict[str, Any]:
+        """Create a shopping item category (e.g. a store aisle) to sort lists by."""
+        client = get_client()
+        hid = await client.resolve_household(household_id)
+        result = await client.request("POST", f"/household/{hid}/category", json={"name": name})
+        return {"id": result.get("id"), "name": result.get("name")} if result else {"name": name}
 
     @mcp.tool
     @kitchenowl_tool
